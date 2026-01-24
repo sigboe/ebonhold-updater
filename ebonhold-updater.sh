@@ -120,7 +120,7 @@ if (( file_count > 0 )); then
             mkdir -p "$(dirname ${path})"
             curl -fL ${url} -o "${path}"
         fi
-    done < <(jq -cM '.[]' <<< "${game_files}") | zenity --progress --title "Project Ebonhold Updater" --percentage=0 --auto-close
+    done < <(jq -cM '.[]' <<< "${game_files}") | zenity --progress --title "Project Ebonhold Updater" --percentage=0 --auto-close --width=400 2>/dev/null
 fi
 
 if [ $# -gt 0 ]; then
