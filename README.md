@@ -2,6 +2,8 @@
 
 A bash-based updater script for Project Ebonhold, a World of Warcraft custom server. The updater downloads and verifies game files by comparing MD5 hashes against a remote manifest.
 
+As of January 24 2026, checking for updates and downloading updates requires you to be logged using your Project Ebonhold user account. Project Ebonhold's team has said that this is a precausionary measure to avoid issues related to resource management. This script will prompt you for username and password, and will request an authToken from Project Ebonhold's API. It will then store the token in a file called .updaterToken for further use. There is no obfuscation in this script and you can see that the script only connects to Project Ebonhold's API. The token is stored in plain text, but this is the same as the official launcher or your webbrowser does when you are logged into a website like Project Ebonhold. However a webbrowser does obfuscate where it stores the token. 
+
 ![Screenshot](screenshot.png)
 
 ## Features
@@ -9,6 +11,8 @@ A bash-based updater script for Project Ebonhold, a World of Warcraft custom ser
 - **Automated File Verification**: Compares local file MD5 hashes against remote manifest
 - **GUI Progress Tracking**: User-friendly progress dialogs using zenity
 - **Steam Integration**: Seamlessly handles Steam launch arguments
+- **Game Mods:** using `--mods=hd_patch` you can enable downloading/updating/verifying the hd_patch
+- **Game Modes:** using `--game=roguelike` for the PTR server, currently it defaults to `--game=roguelike-prod`
 
 ## Prerequisites
 
@@ -35,6 +39,22 @@ The following system packages are required:
 ./epoch-updater.sh
 ```
 
+### Install/update HD client mod
+
+```bash
+./epoch-updater.sh --mods=hd_patch
+```
+
+### Switching to Public Test Realm
+
+```bash
+./epoch-updater.sh --game=roguelike
+```
+
+note not having `--game=roguelike` is the same as `--game=roguelike-prod` and will download the main game. If you want to stay in PTR permanently make a shortcut including `--game=roguelike`
+
+if in the future the API changes such that the main game is called roguelike and the ptr is called roguelkike-ptr instead, Ill update the default game, and the readme.
+
 ### Steam Integration (Optional)
 
 1. If you don't already have World of Warcraft Wrath of the Litchking installed, please run the ebonhold-updater.sh script one time first.
@@ -51,5 +71,6 @@ Technically, the script will detect it is running in Steam, and rewrite Steam's 
 
 ## TODO
 
-* Consider adding support for not downloading the HD patch when downloading or --verify the base client
-* addign support for other game modes when they come, or ptr
+* Improve handling of --mods, currently it does not handle if you give it a name of a mod not available in the API. (currently only mod is "hd_patch", so use --mods=hd_patch )
+* Improve handling og --game= currently it works fine, but when Project Ebonhold add more game modes we might have to handle deleting files when switching game mode
+* Optionally display the latest news entry using --news
