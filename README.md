@@ -35,20 +35,39 @@ The following system packages are required:
 
 ### Basic Usage
 
+This will either update your local installation or ask you if you want to download the full game if it doesn't find Wow.exe
+
 ```bash
-./epoch-updater.sh
+./ebonhold-updater.sh
 ```
 
 ### Install/update HD client mod
 
 ```bash
-./epoch-updater.sh --mods=hd_patch
+./ebonhold-updater.sh --mods=hd_patch
 ```
 
+### Debug output
+
+Script will output information to the terminal if you run it with the debug flag
+
+```bash
+./ebonhold-updater --debug
+# or
+debug=true ./ebonhold-updater.sh
+```
+
+### Verify game files
+
+Verifying game files will check all game files, and download, missing, outdated or files that doesn't match.
+
+```bash
+./ebonhold-updater.sh --verify
+```
 ### Switching to Public Test Realm
 
 ```bash
-./epoch-updater.sh --game=roguelike
+./ebonhold-updater.sh --game=roguelike
 ```
 
 note not having `--game=roguelike` is the same as `--game=roguelike-prod` and will download the main game. If you want to stay in PTR permanently make a shortcut including `--game=roguelike`
