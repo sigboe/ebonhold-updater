@@ -92,7 +92,10 @@ if [[ -z "${manifest}" ]]; then
         -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" \
         "${login_api}")"
     if ! jq -e '.success' <<< "${session}" >/dev/null 2>&1; then
-        debug "session invalid, exiting"
+        message="$(jq -r '.message' <<< "${session}")"
+        debug "session invalid"
+        debug "${message}"
+        debug "exiting"
         exit 1
     else
         debug "session works, fetching manifest"

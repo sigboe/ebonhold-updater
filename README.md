@@ -90,6 +90,7 @@ Technically, the script will detect it is running in Steam, and rewrite Steam's 
 
 ## TODO
 
+* Refactor UI vs CLI, output and tell the user the servers message for why a login isnt successful
 * Improve handling of --mods, currently it does not handle if you give it a name of a mod not available in the API. (currently only mod is "hd_patch", so use --mods=hd_patch )
 * Improve handling og --game= currently it works fine, but when Project Ebonhold add more game modes we might have to handle deleting files when switching game mode
 * Optionally display the latest news entry using --news
