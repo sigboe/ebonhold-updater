@@ -1,0 +1,8 @@
+# Ignore all files (We may run inside Wow directory)
+*
+# Don't ignore files intended for the git repo
+!.gitignore
+!LICENSE
+!ebonhold-updater.sh
+!README.md
+!screenshot.png

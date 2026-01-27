@@ -8,17 +8,17 @@ manifest_api="https://api.project-ebonhold.com/api/launcher/games"
 file_url_api="https://api.project-ebonhold.com/api/launcher/download?file_ids=" # append comma sepparate list of file ids
 token_file="${scriptdir}/.updaterToken"
 [[ -f "${token_file}" ]] && authToken=$(<"${token_file}")
-download_queue=()
-include_common=false
+if [[ -t 0 ]]; then interactiveShell="true"; else interactiveShell="false"; fi
+if [[ -x "$(command -v zenity)" ]]; then GUI="${GUI:=true}"; else GUI="false"; fi
+[[ "${GUI}" == "false" ]] && [[ "${interactiveShell}" == "false" ]] && exit 1
+include_common="false"
 
 debug() {
-    local msg="$*"
-    if [[ "$debug" == true ]]; then
+    local msg="${*}"
+    if [[ "${debug}" == "true" ]]; then
         # Color codes
-        local RED="\033[0;31m"
-        local GREEN="\033[0;32m"
-        local YELLOW="\033[0;33m"
         local BLUE="\033[0;34m"
+        local YELLOW="\033[0;33m"
         local NC="\033[0m"  # No Color
 
         # Print [DEBUG]: in cyan, message in yellow
@@ -26,21 +26,172 @@ debug() {
     fi
 }
 
+error() {
+    local exit_code=1
+    local msg
+
+    # Check if first argument is a number (exit code)
+    if [[ "${1}" =~ ^[0-9]+$ ]]; then
+        exit_code="${1}"
+        shift
+    fi
+
+    msg="${*}"
+
+    # Color codes
+    local RED="\033[0;31m"
+    local YELLOW="\033[0;33m"
+    local NC="\033[0m"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --error \
+            --title="Error" \
+            --text="${msg}" \
+            --width=400 2>/dev/null
+    else
+        echo -e "\n\033[2K${RED}[ERROR]:${NC} ${YELLOW}${msg}${NC}" >&2
+    fi
+
+    exit "${exit_code}"
+}
+
+
+# This function is here to easily support GUI via zenity
+# or text based output more easilty
+progress() {
+    local title="${1}"
+    local bar_width="40"
+    local text=""
+    local percent="0"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --progress \
+            --title="${title}" \
+            --percentage=0 \
+            --auto-close \
+            --width=400 2>/dev/null
+        return
+    fi
+
+    # Terminal fallback
+    printf "%s\n\n" "${title}"
+    while IFS= read -r line; do
+        if [[ "${line}" =~ ^# ]]; then
+            text="${line#\#}"
+        elif [[ "${line}" =~ ^[0-9]+$ ]]; then
+            percent="${line}"
+        else
+            continue
+        fi
+
+        filled=$(( percent * bar_width / 100 ))
+        empty=$(( bar_width - filled ))
+
+        if [[ "${debug}" == "true" ]]; then
+            debug "Progress: ${percent}%"
+        else
+            printf "\r\033[2K%s\n [" "${text}"
+            printf "%0.s#" $(seq 1 ${filled})
+            printf "%0.s-" $(seq 1 ${empty})
+            printf "] %3d%%\033[K" "${percent}"
+        fi
+    done
+
+    echo
+}
+
+prompt_text() {
+    local title="${1}"
+    local text="${2}"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --entry \
+            --title="${title}" \
+            --text="${text}" \
+            --width=400 2>/dev/null
+    else
+        local input
+        echo "${text}"
+        read -r -p "> " input
+        [[ -z "${input}" ]] && return 1
+        echo "${input}"
+    fi
+}
+
+prompt_password() {
+    local title="${1}"
+    local text="${2}"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --password \
+            --title="${title}" \
+            --text="${text}" \
+            --width=400 2>/dev/null
+    else
+        local input
+        echo "${text}"
+        read -r -s -p "Password: " input
+        echo
+        [[ -z "${input}" ]] && return 1
+        echo "${input}"
+    fi
+}
+
+prompt_yes_no() {
+    local title="${1}"
+    local text="${2}"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --question \
+            --title="${title}" \
+            --text="${text}" \
+            --width=400 2>/dev/null
+        return "${?}"
+    else
+        while true; do
+            read -r -p "${text} [y/N]: " answer
+            case "${answer}" in
+                [yY]|[yY][eE][sS]) return 0 ;;
+                [nN]|[nN][oO]|"") return 1 ;;
+                *) echo "Please answer yes or no." ;;
+            esac
+        done
+    fi
+}
+
+notify() {
+    local title="${1}"
+    local text="${2}"
+
+    if [[ "${GUI}" == "true" ]]; then
+        zenity --info \
+            --title="${title}" \
+            --text="${text}" \
+            --width=400 2>/dev/null
+    else
+        echo
+        echo "=== ${title} ==="
+        echo "${text}"
+        echo
+        read -r -p "Press Enter to continue..." _
+    fi
+}
+
 filtered_args=()
-for arg in "$@"; do
-    if [[ "$arg" == "--debug" ]]; then
+for arg in "${@}"; do
+    if [[ "${arg}" == "--debug" ]]; then
         debug=true
         debug "Debug messages enabled"
-    elif [[ "$arg" == "--verify" ]]; then
+    elif [[ "${arg}" == "--verify" ]]; then
         include_common=true
-    elif [[ "$arg" == --game=* ]]; then
+    elif [[ "${arg}" == --game=* ]]; then
         game="${arg#--game=}"
         debug "Game set to: ${game}"
-    elif [[ "$arg" == --mods=* ]]; then
+    elif [[ "${arg}" == --mods=* ]]; then
         option_slugs="${arg#--mods=}"
         debug "Also downloading mods: ${option_slugs}"
     else
-        filtered_args+=("$arg")
+        filtered_args+=("${arg}")
     fi
 done
 set -- "${filtered_args[@]}"
@@ -49,13 +200,13 @@ set -- "${filtered_args[@]}"
 # ./script %command%
 # then this script will relaunch the command with this script inside the
 # SteamLaunch wrapper so that Zenity will be displayed in GameScope
-args=("$@")
+args=("${@}")
 for i in "${!args[@]}"; do
     if [ "${args[$i]}" = "SteamLaunch" ]; then
         # Insert $0 at position i+3 (two after SteamLaunch)
         debug "Steam detected, relaunching with gamescope integration"
         insert_pos=$((i + 3))
-        new_args=("${args[@]:0:$insert_pos}" "$0" "${args[@]:$insert_pos}")
+        new_args=("${args[@]:0:$insert_pos}" "${0}" "${args[@]:$insert_pos}")
         exec "${new_args[@]}"
         exit
     fi
@@ -65,7 +216,7 @@ if [[ -n "${authToken}" ]]; then
     debug "Auth token found"
     manifest=$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")
     if ! jq -e '.success' <<< "${manifest}" >/dev/null 2>&1; then
-        debug "Token invalid, need login"
+        debug "Token invalid, asking user to login"
         unset authToken manifest
     else
         debug "Token works, manifest fetched"
@@ -73,91 +224,61 @@ if [[ -n "${authToken}" ]]; then
 fi
 
 if [[ -z "${manifest}" ]]; then
-    if [[ -x "$(command -v zenity)" ]]; then
-            USERNAME=$(zenity --entry --title="Ebonhold Login" --text="Enter your username:" --width=400 2>/dev/null)
-            [[ -z "${USERNAME}" ]] && exit 1
-            PASSWORD=$(zenity --password --title="Password for $USERNAME" --width=400 2>/dev/null)
-            [[ -z "${PASSWORD}" ]] && exit 1
-    else
-            echo "Project Ebonhold requires you to be logged in to update."
-            read -p "Username:" USERNAME
-            [[ -z "${USERNAME}" ]] && exit 1
-            read -p "Password: " -s PASSWORD
-            [[ -z "${PASSWORD}" ]] && exit 1
-            echo
-    fi
+    ebonhold_user="$(prompt_text "Ebonhold Login" "Enter your username:")" || exit 1
+    ebonhold_password="$(prompt_password "Ebonhold Login" "Password for ${ebonhold_user}")" || exit 1
 
-    session="$( curl -s -X POST \
+    # open a session, and extract http_code
+    session="$(curl -s -X POST -w "\n%{http_code}" \
         -H "Content-Type: application/json" \
-        -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}" \
+        -d "{\"username\":\"${ebonhold_user}\",\"password\":\"${ebonhold_password}\"}" \
         "${login_api}")"
+    http_code="$(tail -n1 <<< "${session}")"
+    debug "HTTP return code ${http_code}"
+    session="$(head -n-1 <<< "${session}")"
     if ! jq -e '.success' <<< "${session}" >/dev/null 2>&1; then
         message="$(jq -r '.message' <<< "${session}")"
-        debug "session invalid"
-        debug "${message}"
-        debug "exiting"
-        exit 1
+        [[ -z "${message}" ]] && message="HTTP code: ${http_code}"
+        error 1 "session invalid\n${message}\nExiting"
     else
         debug "session works, fetching manifest"
         authToken="$(jq -r '.token' <<< "${session}" )"
-        echo "${authToken}" > "${token_file}"
+        echo -n "${authToken}" > "${token_file}"
         debug "Auth token stored"
         manifest="$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")"
     fi
 fi
 
-if [[ ! "${include_common}" == "true" ]] && [[ -x "$(command -v zenity)" ]]; then
-    if [[ ! -f "Wow.exe" && ! -f "wow.exe" ]]; then
-        if zenity --question --width=400 \
-            --title="Project Ebonhold Updater" \
-            --text="Wow.exe not found in the current directory.\n\nDownload the full client?"; then
-            include_common=true 2>/dev/null
-        else
-            zenity --info --title="Project Ebonhold Updater" --text="Aborting" --width=400 2>/dev/null
-            exit 1
-        fi
-    fi
-else
-    if [[ ! -f "Wow.exe" && ! -f "wow.exe" ]]; then
-        read -p "Wow.exe not found in the current directory. Download full client? [y/N]: " response
-        case "$response" in
-            [yY]|[yY][eE][sS]) 
-                include_common=true
-                ;;
-            *)
-                if [[ -x "$(command -v zenity)" ]]; then
-                    zenity --info --text="Aborting" --width=400 2>/dev/null
-                else
-                    echo "Aborting"
-                fi
-                exit 1
-                ;;
-        esac
+if [[ ! -f "Wow.exe" && ! -f "wow.exe" ]]; then
+    if prompt_yes_no "Project Ebonhold Updater" "Wow.exe not found in the current directory.\n\nDownload the full client?"; then
+        include_common="true"
+    else
+        notify "Project Ebonhold Updater" "Aborting"
+        exit 1
     fi
 fi
 
-game_index=$(jq -r --arg slug "$game" '
+game_index=$(jq -r --arg slug "${game}" '
   [ .data.games[] | .slug ] | index($slug)
-' <<< "$manifest")
+' <<< "${manifest}")
 debug "${game} has index ${game_index}"
-if [ -z "$game_index" ]; then
-  debug "Error: game '$game' not found in manifest"
-  exit 1
+if [ -z "${game_index}" ]; then
+  error 1 "Error: game '${game}' not found in manifest"
 fi
 
 if [[ "$include_common" == true ]]; then
     debug "Verifying and downloading all files"
-    game_files=$(jq -cM --arg i "$game_index" '
+    game_files=$(jq -cM --arg i "${game_index}" '
         (.data.common.files[]?, .data.games[($i|tonumber)].files[]?) | select(.option_slug? == null)
-    ' <<< "$manifest")
+    ' <<< "${manifest}")
 else
     debug "Verifying and downloading only update files"
-    game_files=$(jq -cM --arg i "$game_index" '
+    game_files=$(jq -cM --arg i "${game_index}" '
         .data.games[($i|tonumber)].files[]? | select(.option_slug? == null)
-    ' <<< "$manifest")
+    ' <<< "${manifest}")
 fi
 
-mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "$game_index" '
+debug "Looking for mods: ${option_slugs//,/ }"
+mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
   ($slugs | split(",") | map(select(length > 0))) as $allowed
   |
   if ($allowed | length) == 0 then
@@ -166,44 +287,65 @@ mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "$game_index" '
     (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
     | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
   end
-' <<< "$manifest")
+' <<< "${manifest}")
+debug "Mods found and added to queue: $(while read -r mod; do
+    jq -r '.option_slug' <<< "${mod}"
+done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
 
-game_files=$(printf "%s\n%s\n" "$mod_files" "$game_files" | grep -v '^$')
+game_files=$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')
 
 file_count="$(wc -l <<< "${game_files}")"
-count=0
+
+total_bytes="0"
+while read -r file; do
+    file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
+    total_bytes="$(( total_bytes + file_size ))"
+done <<< "${game_files}"
+bytes_done="0"
 
 if (( file_count > 0 )); then
     while read -r file; do
-        count=$((++count))
-        percentage=$((count * 100 / file_count))
+        file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
+        bytes_done=$((bytes_done + file_size))
+        percentage=$(( bytes_done * 100 / total_bytes ))
         echo "${percentage}"
-        id=$(jq -r '.id' <<<"$file")
-        path=$(jq -r '.file_path_from_game_root' <<<"$file")
+        id=$(jq -r '.id' <<<"${file}")
+        path=$(jq -r '.file_path_from_game_root' <<<"${file}")
         echo "#${path}"
-        debug "${path}"
-        expected_md5=$(jq -r '.file_hash' <<<"$file" | base64 --decode | xxd -p)
+        debug "File ID: ${id} File: ${path}"
+        expected_md5=$(jq -r '.file_hash' <<<"${file}" | base64 --decode | od -An -tx1 | tr -d ' \n')
         debug "Expected md5sum: ${expected_md5}"
-        url="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}" | jq --raw-output '.files|.[]|.url')"
 
-        if [[ ! -f "$path" ]]; then
+        download="false"
+        if [[ ! -f "${path}" ]]; then
             debug "File not found, downloading"
+            download="true"
+        else
+            local_md5=$(md5sum "${path}" | cut -d' ' -f1)
+            debug "Local md5sum: ${local_md5}"
+
+            if [[ "${local_md5}" != "${expected_md5}" ]]; then
+                debug "File does not match, downloading"
+            fi
+        fi
+
+        if [[ "${download}" == "true" ]]; then
             mkdir -p "$(dirname "${path}")"
-            curl -fL ${url} -o "${path}"
-            continue
+            response="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}")"
+            retry_after="$(jq -r '.retry_after_minutes // 0' <<<"$response")"
+            [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
+            url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
+            curl -fL "${url}" -o "${path}"
+            touch "Cache/invalid"
         fi
+    done <<< "${game_files}" | progress "Project Ebonhold Updater"
 
-        local_md5=$(md5sum "$path" | awk '{print $1}')
-        debug "Local md5sum: ${local_md5}"
-
-        if [[ "$local_md5" != "$expected_md5" ]]; then
-            debug "File does not match, downloading"
-            mkdir -p "$(dirname ${path})"
-            curl -fL ${url} -o "${path}"
-        fi
-    done <<< "${game_files}" | zenity --progress --title "Project Ebonhold Updater" --percentage=0 --auto-close --width=400 2>/dev/null
+    if [[ -f "Cache/invalid" ]]; then
+        [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)" && rm "Cache/invalid"
+        [[ -n "${deleted}" ]] && debug "Update fetched, cleared cache\n${deleted}"
+    fi
 fi
 
-if [ $# -gt 0 ]; then
-    exec "$@"
+if [ ${#} -gt 0 ]; then
+    exec "${@}"
 fi

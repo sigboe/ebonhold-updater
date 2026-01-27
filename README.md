@@ -19,17 +19,22 @@ As of January 24 2026, checking for updates and downloading updates requires you
 The following system packages are required:
 - `curl`
 - `jq`
+
+Optional dependency
 - `zenity`
 
-*Note: `md5sum` and `stat` are also required but are usually pre-installed.*
+Zenity is needed for a GUI, if you don't have Zenity installed you need to run the script in a terminal (not background task)
+
+All of these are pre-installed on SteamOS and some other game releated distros,
+if not they should be easy to install (package name is same as the programs name)
 
 ## Installation
 
 1. Place `ebonhold-updater.sh` in your World of Warcraft Wrath of the Litchking directory or the directory where you want to download World of Warcraft
 2. Make the script executable:
-   ```bash
-   chmod +x ebonhold-updater.sh
-   ```
+```bash
+chmod +x ebonhold-updater.sh
+```
 
 ## Usage
 
@@ -42,6 +47,9 @@ This will either update your local installation or ask you if you want to downlo
 ```
 
 ### Install/update HD client mod
+
+`--mods` accepts a comma separated list of mods,
+at the time of writing only  `hd_patch` is available
 
 ```bash
 ./ebonhold-updater.sh --mods=hd_patch
@@ -65,6 +73,10 @@ Verifying game files will check all game files, and download, missing, outdated 
 ./ebonhold-updater.sh --verify
 ```
 ### Switching to Public Test Realm
+
+At the time of writing two options are available for `--game`
+`roguelike-prod` is the main game, this is the default selection (if you don't use the --game option)
+`roguelike` is the Public test realm (ptr)
 
 ```bash
 ./ebonhold-updater.sh --game=roguelike
@@ -90,7 +102,5 @@ Technically, the script will detect it is running in Steam, and rewrite Steam's 
 
 ## TODO
 
-* Refactor UI vs CLI, output and tell the user the servers message for why a login isnt successful
-* Improve handling of --mods, currently it does not handle if you give it a name of a mod not available in the API. (currently only mod is "hd_patch", so use --mods=hd_patch )
-* Improve handling og --game= currently it works fine, but when Project Ebonhold add more game modes we might have to handle deleting files when switching game mode
 * Optionally display the latest news entry using --news
+* Improve handling og --game= currently it works fine, but when Project Ebonhold add more game modes we might have to handle deleting files when switching game mode
