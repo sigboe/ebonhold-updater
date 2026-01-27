@@ -277,22 +277,24 @@ else
     ' <<< "${manifest}")
 fi
 
-debug "Looking for mods: ${option_slugs//,/ }"
-mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
-  ($slugs | split(",") | map(select(length > 0))) as $allowed
-  |
-  if ($allowed | length) == 0 then
-    empty
-  else
-    (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
-    | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
-  end
-' <<< "${manifest}")
-debug "Mods found and added to queue: $(while read -r mod; do
-    jq -r '.option_slug' <<< "${mod}"
-done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
+if [[ -n "${option_slugs}" ]]; then
+    debug "Looking for mods: ${option_slugs//,/ }"
+    mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
+      ($slugs | split(",") | map(select(length > 0))) as $allowed
+      |
+      if ($allowed | length) == 0 then
+        empty
+      else
+        (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
+        | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
+      end
+    ' <<< "${manifest}")
+    debug "Mods found and added to queue: $(while read -r mod; do
+        jq -r '.option_slug' <<< "${mod}"
+    done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
+    game_files=$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')
+fi
 
-game_files=$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')
 
 file_count="$(wc -l <<< "${game_files}")"
 
