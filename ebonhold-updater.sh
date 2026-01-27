@@ -326,6 +326,7 @@ if (( file_count > 0 )); then
 
             if [[ "${local_md5}" != "${expected_md5}" ]]; then
                 debug "File does not match, downloading"
+                download="true"
             fi
         fi
 
