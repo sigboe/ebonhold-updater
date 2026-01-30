@@ -196,6 +196,21 @@ for arg in "${@}"; do
 done
 set -- "${filtered_args[@]}"
 
+# The game supports loging in via -login and -password
+# If ebonhold-updater is ran as a wrapper (exmaple in steam, see readme)
+# we can just capture the username and password and use it for the
+# authentication that updating requires, if there is no credentials
+# we just ask the user later if the authToken has expired
+for ((i=1; i <= ${#}; i++)); do
+    arg="${!i}"
+    next=$((i + 1))
+    case "${arg}" in
+        -login) [[ ${next} -le ${#} ]] && ebonhold_user="${!next}" ;;
+        -password) [[ ${next} -le ${#} ]] && ebonhold_password="${!next}" ;;
+    esac
+done
+[[ -n "${ebonhold_user}" ]] && [[ -n "${ebonhold_password}" ]] && debug "fetched credentials from launch arguments"
+
 # If Wow.exe is run as a non-steam app, and this script is launched using
 # ./script %command%
 # then this script will relaunch the command with this script inside the
@@ -224,8 +239,8 @@ if [[ -n "${authToken}" ]]; then
 fi
 
 if [[ -z "${manifest}" ]]; then
-    ebonhold_user="$(prompt_text "Ebonhold Login" "Enter your username:")" || exit 1
-    ebonhold_password="$(prompt_password "Ebonhold Login" "Password for ${ebonhold_user}")" || exit 1
+    [[ -z "${ebonhold_user}" ]] && { ebonhold_user="$(prompt_text "Ebonhold Login" "Enter your username:")" || exit 1; }
+    [[ -z "${ebonhold_password}" ]] && { ebonhold_password="$(prompt_password "Ebonhold Login" "Password for ${ebonhold_user}")" || exit 1; }
 
     # open a session, and extract http_code
     session="$(curl -s -X POST -w "\n%{http_code}" \
