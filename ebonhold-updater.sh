@@ -108,11 +108,11 @@ prompt_text() {
         zenity --entry \
             --title="${title}" \
             --text="${text}" \
-            --width=400 2>/dev/null
+            --width=400 2>/dev/null || return 1
     else
         local input
-        echo "${text}"
-        read -r -p "> " input
+        echo "${title}"
+        read -r -p "${text} > " input
         [[ -z "${input}" ]] && return 1
         echo "${input}"
     fi
@@ -129,7 +129,7 @@ prompt_password() {
             --width=400 2>/dev/null
     else
         local input
-        echo "${text}"
+        echo "${title}"
         read -r -s -p "Password: " input
         echo
         [[ -z "${input}" ]] && return 1
@@ -149,6 +149,7 @@ prompt_yes_no() {
         return "${?}"
     else
         while true; do
+            [[ -n "${title}" ]] && echo "${title}"
             read -r -p "${text} [y/N]: " answer
             case "${answer}" in
                 [yY]|[yY][eE][sS]) return 0 ;;
@@ -263,7 +264,7 @@ if [[ -z "${manifest}" ]]; then
     fi
 fi
 
-if [[ ! -f "Wow.exe" && ! -f "wow.exe" ]]; then
+if [[ ! -n "$(find "${scriptdir}/" -maxdepth 1 -iname "wow.exe")" ]]; then
     if prompt_yes_no "Project Ebonhold Updater" "Wow.exe not found in the current directory.\n\nDownload the full client?"; then
         include_common="true"
     else
@@ -334,11 +335,11 @@ if (( file_count > 0 )); then
         debug "Expected md5sum: ${expected_md5}"
 
         download="false"
-        if [[ ! -f "${path}" ]]; then
+        if [[ ! -f "${scriptdir}/${path}" ]]; then
             debug "File not found, downloading"
             download="true"
         else
-            local_md5=$(md5sum "${path}" | cut -d' ' -f1)
+            local_md5=$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)
             debug "Local md5sum: ${local_md5}"
 
             if [[ "${local_md5}" != "${expected_md5}" ]]; then
@@ -348,18 +349,18 @@ if (( file_count > 0 )); then
         fi
 
         if [[ "${download}" == "true" ]]; then
-            mkdir -p "$(dirname "${path}")"
+            mkdir -p "$(dirname "${scriptdir}/${path}")"
             response="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}")"
             retry_after="$(jq -r '.retry_after_minutes // 0' <<<"$response")"
             [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
             url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
-            curl -fL "${url}" -o "${path}"
-            touch "Cache/invalid"
+            curl -fL "${url}" -o "${scriptdir}/${path}"
+            touch "${scriptdir}/Cache/invalid"
         fi
     done <<< "${game_files}" | progress "Project Ebonhold Updater"
 
-    if [[ -f "Cache/invalid" ]]; then
-        [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)" && rm "Cache/invalid"
+    if [[ -f "${scriptdir}/Cache/invalid" ]]; then
+        [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)" && rm "${scriptdir}/Cache/invalid"
         [[ -n "${deleted}" ]] && debug "Update fetched, cleared cache\n${deleted}"
     fi
 fi
