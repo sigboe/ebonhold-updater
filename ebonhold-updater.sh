@@ -178,6 +178,75 @@ notify() {
     fi
 }
 
+
+# downloads a new line separated list of json objects
+# usage: downloadFiles "${game_files}"
+downloadFiles() {
+    local file_count total_bytes file_size bytes_done percentage id path expected_md5 local_md5 download response retry_after url
+    local game_files="${1}"
+
+    [[ -z "${game_files}" ]] && return
+
+    file_count="$(wc -l <<< "${game_files}")"
+
+    total_bytes="0"
+    while read -r file; do
+        file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
+        total_bytes="$(( total_bytes + file_size ))"
+    done <<< "${game_files}"
+    bytes_done="0"
+
+    if (( file_count > 0 )); then
+        while read -r file; do
+            file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
+            echo "${percentage}"
+            bytes_done=$((bytes_done + file_size))
+            percentage=$(( bytes_done * 100 / total_bytes ))
+            id=$(jq -r '.id' <<<"${file}")
+            path=$(jq -r '.file_path_from_game_root' <<<"${file}")
+            echo "#${path}"
+            debug "File ID: ${id} File: ${path}"
+            expected_md5=$(jq -r '.file_hash' <<<"${file}" | base64 --decode | od -An -tx1 | tr -d ' \n')
+            debug "Expected md5sum: ${expected_md5}"
+
+            download="false"
+            if [[ ! -f "${scriptdir}/${path}" ]]; then
+                debug "File not found, downloading"
+                download="true"
+            else
+                local_md5=$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)
+                debug "Local md5sum: ${local_md5}"
+
+                if [[ "${local_md5}" != "${expected_md5}" ]]; then
+                    debug "File does not match, downloading"
+                    download="true"
+                fi
+            fi
+
+            if [[ "${download}" == "true" ]]; then
+                mkdir -p "$(dirname "${scriptdir}/${path}")"
+                response="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}")"
+                retry_after="$(jq -r '.retry_after_minutes // 0' <<<"$response")"
+                [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
+                url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
+                curl -fL "${url}" -o "${scriptdir}/${path}"
+                touch "${scriptdir}/Cache/invalid"
+            fi
+        done <<< "${game_files}" | progress "Project Ebonhold Updater"
+    fi
+}
+
+# This does clear the cache if there is any cache
+# to clear only when we think the cache is invalid then call the function like so:
+# [[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
+clearCache() {
+    local deleted
+    if [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)"; then
+        rm "${scriptdir}/Cache/invalid"
+        [[ -n "${deleted}" ]] && debug "Update fetched, cleared cache\n${deleted}"
+    fi
+}
+
 filtered_args=()
 for arg in "${@}"; do
     if [[ "${arg}" == "--debug" ]]; then
@@ -311,59 +380,9 @@ if [[ -n "${option_slugs}" ]]; then
     game_files=$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')
 fi
 
+downloadFiles "${game_files}"
 
-file_count="$(wc -l <<< "${game_files}")"
-
-total_bytes="0"
-while read -r file; do
-    file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
-    total_bytes="$(( total_bytes + file_size ))"
-done <<< "${game_files}"
-bytes_done="0"
-
-if (( file_count > 0 )); then
-    while read -r file; do
-        file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
-        bytes_done=$((bytes_done + file_size))
-        percentage=$(( bytes_done * 100 / total_bytes ))
-        echo "${percentage}"
-        id=$(jq -r '.id' <<<"${file}")
-        path=$(jq -r '.file_path_from_game_root' <<<"${file}")
-        echo "#${path}"
-        debug "File ID: ${id} File: ${path}"
-        expected_md5=$(jq -r '.file_hash' <<<"${file}" | base64 --decode | od -An -tx1 | tr -d ' \n')
-        debug "Expected md5sum: ${expected_md5}"
-
-        download="false"
-        if [[ ! -f "${scriptdir}/${path}" ]]; then
-            debug "File not found, downloading"
-            download="true"
-        else
-            local_md5=$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)
-            debug "Local md5sum: ${local_md5}"
-
-            if [[ "${local_md5}" != "${expected_md5}" ]]; then
-                debug "File does not match, downloading"
-                download="true"
-            fi
-        fi
-
-        if [[ "${download}" == "true" ]]; then
-            mkdir -p "$(dirname "${scriptdir}/${path}")"
-            response="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}")"
-            retry_after="$(jq -r '.retry_after_minutes // 0' <<<"$response")"
-            [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
-            url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
-            curl -fL "${url}" -o "${scriptdir}/${path}"
-            touch "${scriptdir}/Cache/invalid"
-        fi
-    done <<< "${game_files}" | progress "Project Ebonhold Updater"
-
-    if [[ -f "${scriptdir}/Cache/invalid" ]]; then
-        [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)" && rm "${scriptdir}/Cache/invalid"
-        [[ -n "${deleted}" ]] && debug "Update fetched, cleared cache\n${deleted}"
-    fi
-fi
+[[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
 
 if [ ${#} -gt 0 ]; then
     exec "${@}"
