@@ -9,7 +9,16 @@ file_url_api="https://api.project-ebonhold.com/api/launcher/download?file_ids=" 
 token_file="${scriptdir}/.updaterToken"
 [[ -f "${token_file}" ]] && authToken="$(<"${token_file}")"
 if [[ -t 0 ]]; then interactiveShell="true"; else interactiveShell="false"; fi
-if [[ -x "$(command -v zenity)" ]]; then GUI="${GUI:=true}"; else GUI="false"; fi
+if    [[ "$XDG_SESSION_TYPE" = "x11" ]] \
+   || [[ "$XDG_SESSION_TYPE" = "wayland" ]] \
+   || [[ -n "$DISPLAY" ]] \
+   || [[ -n "$WAYLAND_DISPLAY" ]]
+then
+        GUI="${GUI:=true}"
+else
+        GUI="false"
+fi
+[[ -x "$(command -v zenity)" ]] || GUI="false"
 [[ "${GUI}" == "false" ]] && [[ "${interactiveShell}" == "false" ]] && exit 1
 include_common="false"
 
