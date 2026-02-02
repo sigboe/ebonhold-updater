@@ -120,10 +120,10 @@ prompt_text() {
             --width=400 2>/dev/null || return 1
     else
         local input
-        echo "${title}"
+        echo "${title}" >&2
         read -r -p "${text} > " input
         [[ -z "${input}" ]] && return 1
-        echo "${input}"
+        echo -n "${input}"
     fi
 }
 
@@ -138,11 +138,10 @@ prompt_password() {
             --width=400 2>/dev/null
     else
         local input
-        echo "${title}"
-        read -r -s -p "Password: " input
-        echo
+        echo "${title}" >&2
+        read -r -s -p "Password: >" input
         [[ -z "${input}" ]] && return 1
-        echo "${input}"
+        echo -n "${input}"
     fi
 }
 
