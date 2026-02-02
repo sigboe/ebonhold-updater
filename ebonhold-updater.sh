@@ -239,7 +239,7 @@ downloadFiles() {
                 [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
                 url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
                 curl -fL "${url}" -o "${scriptdir}/${path}"
-                touch "${scriptdir}/Cache/invalid"
+                [[ -d "${scriptdir}/Cache" ]] && touch "${scriptdir}/Cache/invalid"
             fi
         done <<< "${game_files}" | progress "Project Ebonhold Updater"
     fi
@@ -272,7 +272,7 @@ deleteFiles() {
             invalidCache="true"
         fi
     done <<< "${game_files}"
-    [[ "${invalidCache}" == "true" ]] && touch "${scriptdir}/Cache/invalid"
+    [[ "${invalidCache}" == "true" && -d "${scriptdir}/Cache" ]] && touch "${scriptdir}/Cache/invalid"
 }
 
 # This does clear the cache if there is any cache
