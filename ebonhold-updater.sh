@@ -236,6 +236,36 @@ downloadFiles() {
     fi
 }
 
+# DELETES! files, described by a new line separated list of json objects
+# use to remove mods or removing files before switching game modes
+# usage: deleteFiles "${game_files}"
+deleteFiles() {
+    local file_count id path resolvedpath
+    local game_files="${1}"
+    local invalidCache="false"
+
+    [[ -z "${game_files}" ]] && return
+    while read -r file; do
+        id="$(jq -er '.id' <<<"${file}")" || continue
+        path="$(jq -er '.file_path_from_game_root' <<<"${file}")" || continue
+        path="${path//$'\r'/}"
+        debug "File ID: ${id} File: ${path}"
+
+        resolvedpath="$(realpath -m "${scriptdir}/${path}")"
+        if [[ "${resolvedpath}" != "${scriptdir}/"* ]]; then
+            debug "Skipping unsafe path: ${resolvedpath}"
+            continue
+        fi
+
+        if [[ -f "${scriptdir}/${path}" ]]; then
+            debug "File found, deleting"
+            builtin rm -- "${scriptdir}/${path}"
+            invalidCache="true"
+        fi
+    done <<< "${game_files}"
+    [[ "${invalidCache}" == "true" ]] && touch "${scriptdir}/Cache/invalid"
+}
+
 # This does clear the cache if there is any cache
 # to clear only when we think the cache is invalid then call the function like so:
 # [[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
@@ -315,7 +345,7 @@ if [[ -z "${manifest}" ]]; then
     # open a session, and extract http_code
     session="$(curl -s -X POST -w "\n%{http_code}" \
         -H "Content-Type: application/json" \
-        -d "{\"username\":\"${ebonhold_user}\",\"password\":\"${ebonhold_password}\"}" \
+        -d "{\"username\":\"${ebonhold_user}\",\"password\":\"${ebonhold_password}\",\"rememberMe\":true}" \
         "${login_api}")"
     http_code="$(tail -n1 <<< "${session}")"
     debug "HTTP return code ${http_code}"
