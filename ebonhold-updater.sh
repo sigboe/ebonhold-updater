@@ -7,7 +7,7 @@ login_api="https://api.project-ebonhold.com/api/auth/login"
 manifest_api="https://api.project-ebonhold.com/api/launcher/games"
 file_url_api="https://api.project-ebonhold.com/api/launcher/download?file_ids=" # append comma sepparate list of file ids
 token_file="${scriptdir}/.updaterToken"
-[[ -f "${token_file}" ]] && authToken=$(<"${token_file}")
+[[ -f "${token_file}" ]] && authToken="$(<"${token_file}")"
 if [[ -t 0 ]]; then interactiveShell="true"; else interactiveShell="false"; fi
 if [[ -x "$(command -v zenity)" ]]; then GUI="${GUI:=true}"; else GUI="false"; fi
 [[ "${GUI}" == "false" ]] && [[ "${interactiveShell}" == "false" ]] && exit 1
@@ -27,7 +27,7 @@ debug() {
 }
 
 error() {
-    local exit_code=1
+    local exit_code="0"
     local msg
 
     # Check if first argument is a number (exit code)
@@ -52,7 +52,7 @@ error() {
         echo -e "\n\033[2K${RED}[ERROR]:${NC} ${YELLOW}${msg}${NC}" >&2
     fi
 
-    exit "${exit_code}"
+    [[ "${exit_code}" -ge "1" ]] && exit "${exit_code}"
 }
 
 
@@ -84,8 +84,8 @@ progress() {
             continue
         fi
 
-        filled=$(( percent * bar_width / 100 ))
-        empty=$(( bar_width - filled ))
+        filled="$(( percent * bar_width / 100 ))"
+        empty="$(( bar_width - filled ))"
 
         if [[ "${debug}" == "true" ]]; then
             debug "Progress: ${percent}%"
@@ -200,13 +200,13 @@ downloadFiles() {
         while read -r file; do
             file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
             echo "${percentage}"
-            bytes_done=$((bytes_done + file_size))
-            percentage=$(( bytes_done * 100 / total_bytes ))
-            id=$(jq -r '.id' <<<"${file}")
-            path=$(jq -r '.file_path_from_game_root' <<<"${file}")
+            bytes_done="$((bytes_done + file_size))"
+            percentage="$(( bytes_done * 100 / total_bytes ))"
+            id="$(jq -r '.id' <<<"${file}")"
+            path="$(jq -r '.file_path_from_game_root' <<<"${file}")"
             echo "#${path}"
             debug "File ID: ${id} File: ${path}"
-            expected_md5=$(jq -r '.file_hash' <<<"${file}" | base64 --decode | od -An -tx1 | tr -d ' \n')
+            expected_md5="$(jq -r '.file_hash' <<<"${file}" | base64 --decode | od -An -tx1 | tr -d ' \n')"
             debug "Expected md5sum: ${expected_md5}"
 
             download="false"
@@ -214,7 +214,7 @@ downloadFiles() {
                 debug "File not found, downloading"
                 download="true"
             else
-                local_md5=$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)
+                local_md5="$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)"
                 debug "Local md5sum: ${local_md5}"
 
                 if [[ "${local_md5}" != "${expected_md5}" ]]; then
@@ -250,10 +250,10 @@ clearCache() {
 filtered_args=()
 for arg in "${@}"; do
     if [[ "${arg}" == "--debug" ]]; then
-        debug=true
+        debug="true"
         debug "Debug messages enabled"
     elif [[ "${arg}" == "--verify" ]]; then
-        include_common=true
+        include_common="true"
     elif [[ "${arg}" == --game=* ]]; then
         game="${arg#--game=}"
         debug "Game set to: ${game}"
@@ -273,7 +273,7 @@ set -- "${filtered_args[@]}"
 # we just ask the user later if the authToken has expired
 for ((i=1; i <= ${#}; i++)); do
     arg="${!i}"
-    next=$((i + 1))
+    next="$((i + 1))"
     case "${arg}" in
         -login) [[ ${next} -le ${#} ]] && ebonhold_user="${!next}" ;;
         -password) [[ ${next} -le ${#} ]] && ebonhold_password="${!next}" ;;
@@ -290,7 +290,7 @@ for i in "${!args[@]}"; do
     if [ "${args[$i]}" = "SteamLaunch" ]; then
         # Insert $0 at position i+3 (two after SteamLaunch)
         debug "Steam detected, relaunching with gamescope integration"
-        insert_pos=$((i + 3))
+        insert_pos="$((i + 3))"
         new_args=("${args[@]:0:$insert_pos}" "${0}" "${args[@]:$insert_pos}")
         exec "${new_args[@]}"
         exit
@@ -299,7 +299,7 @@ done
 
 if [[ -n "${authToken}" ]]; then
     debug "Auth token found"
-    manifest=$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")
+    manifest="$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")"
     if ! jq -e '.success' <<< "${manifest}" >/dev/null 2>&1; then
         debug "Token invalid, asking user to login"
         unset authToken manifest
@@ -326,7 +326,7 @@ if [[ -z "${manifest}" ]]; then
         error 1 "session invalid\n${message}\nExiting"
     else
         debug "session works, fetching manifest"
-        authToken="$(jq -r '.token' <<< "${session}" )"
+        authToken="$(jq -r '.token' <<< "${session}")"
         echo -n "${authToken}" > "${token_file}"
         debug "Auth token stored"
         manifest="$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")"
@@ -342,29 +342,29 @@ if [[ ! -n "$(find "${scriptdir}/" -maxdepth 1 -iname "wow.exe")" ]]; then
     fi
 fi
 
-game_index=$(jq -r --arg slug "${game}" '
+game_index="$(jq -r --arg slug "${game}" '
   [ .data.games[] | .slug ] | index($slug)
-' <<< "${manifest}")
+' <<< "${manifest}")"
 debug "${game} has index ${game_index}"
 if [ -z "${game_index}" ]; then
   error 1 "Error: game '${game}' not found in manifest"
 fi
 
-if [[ "$include_common" == true ]]; then
+if [[ "${include_common}" == "true" ]]; then
     debug "Verifying and downloading all files"
-    game_files=$(jq -cM --arg i "${game_index}" '
+    game_files="$(jq -cM --arg i "${game_index}" '
         (.data.common.files[]?, .data.games[($i|tonumber)].files[]?) | select(.option_slug? == null)
-    ' <<< "${manifest}")
+    ' <<< "${manifest}")"
 else
     debug "Verifying and downloading only update files"
-    game_files=$(jq -cM --arg i "${game_index}" '
+    game_files="$(jq -cM --arg i "${game_index}" '
         .data.games[($i|tonumber)].files[]? | select(.option_slug? == null)
-    ' <<< "${manifest}")
+    ' <<< "${manifest}")"
 fi
 
 if [[ -n "${option_slugs}" ]]; then
     debug "Looking for mods: ${option_slugs//,/ }"
-    mod_files=$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
+    mod_files="$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
       ($slugs | split(",") | map(select(length > 0))) as $allowed
       |
       if ($allowed | length) == 0 then
@@ -373,11 +373,11 @@ if [[ -n "${option_slugs}" ]]; then
         (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
         | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
       end
-    ' <<< "${manifest}")
+    ' <<< "${manifest}")"
     debug "Mods found and added to queue: $(while read -r mod; do
         jq -r '.option_slug' <<< "${mod}"
     done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
-    game_files=$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')
+    game_files="$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')"
 fi
 
 downloadFiles "${game_files}"
