@@ -187,6 +187,44 @@ notify() {
 }
 
 
+queueClient() {
+    local manifest="${1}"
+    debug "Verifying and downloading all files"
+    jq -cM '.data.common.files[]? | select(.option_slug? == null)' <<< "${manifest}"
+}
+queueGame() {
+    local game_index="${1}"
+    local manifest="${2}"
+    debug "Verifying and downloading only game files"
+    jq -cM --arg i "${game_index}" '
+        .data.games[($i|tonumber)].files[]? | select(.option_slug? == null)
+    ' <<< "${manifest}"
+}
+queueMods() {
+    local game_index="${1}"
+    local manifest="${2}"
+    local option_slugs="${3}"
+    local mod_files
+    debug "Looking for mods: ${option_slugs//,/ }"
+    mod_files="$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
+      ($slugs | split(",") | map(select(length > 0))) as $allowed
+      |
+      if ($allowed | length) == 0 then
+        empty
+      else
+        (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
+        | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
+      end
+      ' <<< "${manifest}")"
+
+    debug "Mods found and added to queue: $(while read -r mod; do
+        jq -r '.option_slug' <<< "${mod}"
+    done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
+
+    echo "${mod_files}"
+}
+
+
 # downloads a new line separated list of json objects
 # usage: downloadFiles "${game_files}"
 downloadFiles() {
@@ -199,6 +237,7 @@ downloadFiles() {
 
     total_bytes="0"
     while read -r file; do
+        [[ -z "$file" ]] && continue
         file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
         total_bytes="$(( total_bytes + file_size ))"
     done <<< "${game_files}"
@@ -206,6 +245,7 @@ downloadFiles() {
 
     if (( file_count > 0 )); then
         while read -r file; do
+            [[ -z "${file}" ]] && continue
             file_size="$(jq -r '.file_size_bytes' <<<"${file}")"
             echo "${percentage}"
             bytes_done="$((bytes_done + file_size))"
@@ -296,8 +336,9 @@ for arg in "${@}"; do
         game="${arg#--game=}"
         debug "Game set to: ${game}"
     elif [[ "${arg}" == --mods=* ]]; then
-        option_slugs="${arg#--mods=}"
-        debug "Also downloading mods: ${option_slugs}"
+        optional_slugs="${arg#--mods=}"
+        optional_slugs="${optional_slugs//[[:space:]]/}" 
+        debug "Also downloading mods: ${optional_slugs}"
     else
         filtered_args+=("${arg}")
     fi
@@ -374,6 +415,14 @@ fi
 if [[ ! -n "$(find "${scriptdir}/" -maxdepth 1 -iname "wow.exe")" ]]; then
     if prompt_yes_no "Project Ebonhold Updater" "Wow.exe not found in the current directory.\n\nDownload the full client?"; then
         include_common="true"
+        if prompt_yes_no "Project Ebonhold Updater" "Do you want to install the \"HD Patch\"?"; then
+            debug "Also downloading mod: hd_patch"
+            if [[ -z "${optional_slugs}" ]]; then
+                optional_slugs="hd_patch"
+            elif ! grep -Eq '(^|,)hd_patch(,|$)' <<< "${optional_slugs}"; then
+                optional_slugs="${optional_slugs},hd_patch"
+            fi
+        fi
     else
         notify "Project Ebonhold Updater" "Aborting"
         exit 1
@@ -388,35 +437,9 @@ if [ -z "${game_index}" ]; then
   error 1 "Error: game '${game}' not found in manifest"
 fi
 
-if [[ "${include_common}" == "true" ]]; then
-    debug "Verifying and downloading all files"
-    game_files="$(jq -cM --arg i "${game_index}" '
-        (.data.common.files[]?, .data.games[($i|tonumber)].files[]?) | select(.option_slug? == null)
-    ' <<< "${manifest}")"
-else
-    debug "Verifying and downloading only update files"
-    game_files="$(jq -cM --arg i "${game_index}" '
-        .data.games[($i|tonumber)].files[]? | select(.option_slug? == null)
-    ' <<< "${manifest}")"
-fi
-
-if [[ -n "${option_slugs}" ]]; then
-    debug "Looking for mods: ${option_slugs//,/ }"
-    mod_files="$(jq -cM --arg slugs "${option_slugs:-}" --arg i "${game_index}" '
-      ($slugs | split(",") | map(select(length > 0))) as $allowed
-      |
-      if ($allowed | length) == 0 then
-        empty
-      else
-        (.data.common.files[]?, .data.games[($i|tonumber)].files[]?)
-        | select(.option_slug? as $s | $s != null and ($allowed | index($s)))
-      end
-    ' <<< "${manifest}")"
-    debug "Mods found and added to queue: $(while read -r mod; do
-        jq -r '.option_slug' <<< "${mod}"
-    done <<< "${mod_files}"  | sort -u | tr '\n' ' ')"
-    game_files="$(printf "%s\n%s\n" "${mod_files}" "${game_files}" | grep -v '^$')"
-fi
+[[ "${include_common}" == "true" ]] && game_files+=$'\n'"$(queueClient "${manifest}")"
+game_files+=$'\n'"$(queueGame "${game_index}" "${manifest}")"
+[[ -n "${optional_slugs}" ]] && game_files+=$'\n'"$(queueMods "${game_index}" "${manifest}" "${optional_slugs}")"
 
 downloadFiles "${game_files}"
 
