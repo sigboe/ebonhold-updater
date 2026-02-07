@@ -325,23 +325,21 @@ clearCache() {
     fi
 }
 
+# Arguments that will be removed from "${@}"
+# This is used for arguments that will not be passed to the wrapped program
 filtered_args=()
 for arg in "${@}"; do
-    if [[ "${arg}" == "--debug" ]]; then
-        debug="true"
-        debug "Debug messages enabled"
-    elif [[ "${arg}" == "--verify" ]]; then
-        include_common="true"
-    elif [[ "${arg}" == --game=* ]]; then
-        game="${arg#--game=}"
-        debug "Game set to: ${game}"
-    elif [[ "${arg}" == --mods=* ]]; then
-        optional_slugs="${arg#--mods=}"
-        optional_slugs="${optional_slugs//[[:space:]]/}" 
-        debug "Also downloading mods: ${optional_slugs}"
-    else
-        filtered_args+=("${arg}")
-    fi
+    case "${arg}" in
+        --debug) debug="true"; debug "Debug messages enabled" ;;
+        --verify) include_common="true" ; debug "Preparing to download/verify client files" ;;
+        --game=*) game="${arg#--game=}"; debug "Game set to: ${game}" ;;
+        --mods=*)
+            optional_slugs="${arg#--mods=}"
+            optional_slugs="${optional_slugs//[[:space:]]/}" 
+            debug "Also downloading mods: ${optional_slugs}"
+            ;;
+        *) filtered_args+=("${arg}") ;;
+    esac
 done
 set -- "${filtered_args[@]}"
 
