@@ -286,6 +286,7 @@ deleteFiles() {
 
     [[ -z "${game_files}" ]] && return
     while read -r file; do
+        [[ -z "${file}" ]] && continue
         id="$(jq -er '.id' <<<"${file}")" || continue
         path="$(jq -er '.file_path_from_game_root' <<<"${file}")" || continue
         path="${path//$'\r'/}"
@@ -299,7 +300,7 @@ deleteFiles() {
 
         if [[ -f "${scriptdir}/${path}" ]]; then
             debug "File found, deleting"
-            builtin rm -- "${scriptdir}/${path}"
+            rm -- "${scriptdir}/${path}"
             invalidCache="true"
         fi
     done <<< "${game_files}"
@@ -329,6 +330,11 @@ for arg in "${@}"; do
             optional_slugs="${arg#--mods=}"
             optional_slugs="${optional_slugs//[[:space:]]/}" 
             debug "Also downloading mods: ${optional_slugs}"
+            ;;
+        --rmmods=*)
+            rm_optional_slugs="${arg#--rmmods=}"
+            rm_optional_slugs="${rm_optional_slugs//[[:space:]]/}" 
+            debug "Also removing mods: ${rm_optional_slugs}"
             ;;
         *) filtered_args+=("${arg}") ;;
     esac
@@ -429,8 +435,10 @@ fi
 
 [[ "${include_common}" == "true" ]] && game_files+=$'\n'"$(queueClient "${manifest}")"
 game_files+=$'\n'"$(queueGame "${game_index}" "${manifest}")"
-[[ -n "${optional_slugs}" ]] && game_files+=$'\n'"$(queueMods "${game_index}" "${manifest}" "${optional_slugs}")"
+[[ -z "${rm_optional_slugs}" && -n "${optional_slugs}" ]] && game_files+=$'\n'"$(queueMods "${game_index}" "${manifest}" "${optional_slugs}")"
+[[ -n "${rm_optional_slugs}" ]] && rm_files+=$'\n'"$(queueMods "${game_index}" "${manifest}" "${rm_optional_slugs}")"
 
+[[ -n "${rm_files}" ]] && deleteFiles "${rm_files}"
 downloadFiles "${game_files}"
 
 [[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
