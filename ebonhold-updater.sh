@@ -331,11 +331,11 @@ for arg in "${@}"; do
             optional_slugs="${optional_slugs//[[:space:]]/}" 
             debug "Also downloading mods: ${optional_slugs}"
             ;;
-        --rmmods=*)
-            rm_optional_slugs="${arg#--rmmods=}"
-            rm_optional_slugs="${rm_optional_slugs//[[:space:]]/}" 
-            debug "Also removing mods: ${rm_optional_slugs}"
-            ;;
+        #--rmmods=*)
+        #    rm_optional_slugs="${arg#--rmmods=}"
+        #    rm_optional_slugs="${rm_optional_slugs//[[:space:]]/}" 
+        #    debug "Also removing mods: ${rm_optional_slugs}"
+        #    ;;
         *) filtered_args+=("${arg}") ;;
     esac
 done
