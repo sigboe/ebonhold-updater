@@ -21,16 +21,12 @@ fi
 [[ -x "$(command -v zenity)" ]] || GUI="false"
 [[ "${GUI}" == "false" ]] && [[ "${interactiveShell}" == "false" ]] && exit 1
 include_common="false"
+#Terminal Color codes
+BLUE="\033[0;34m" RED="\033[0;31m" YELLOW="\033[0;33m" NC="\033[0m"
 
 debug() {
     local msg="${*}"
     if [[ "${debug}" == "true" ]]; then
-        # Color codes
-        local BLUE="\033[0;34m"
-        local YELLOW="\033[0;33m"
-        local NC="\033[0m"  # No Color
-
-        # Print [DEBUG]: in cyan, message in yellow
         echo -e "${BLUE}[DEBUG]:${NC} ${YELLOW}${msg}${NC}" >&2
     fi
 }
@@ -46,11 +42,6 @@ error() {
     fi
 
     msg="${*}"
-
-    # Color codes
-    local RED="\033[0;31m"
-    local YELLOW="\033[0;33m"
-    local NC="\033[0m"
 
     if [[ "${GUI}" == "true" ]]; then
         zenity --error \
@@ -72,6 +63,7 @@ progress() {
     local bar_width="40"
     local text=""
     local percent="0"
+    local filled empty
 
     if [[ "${GUI}" == "true" ]]; then
         zenity --progress \
@@ -288,7 +280,7 @@ downloadFiles() {
 # use to remove mods or removing files before switching game modes
 # usage: deleteFiles "${game_files}"
 deleteFiles() {
-    local file_count id path resolvedpath
+    local id path resolvedpath
     local game_files="${1}"
     local invalidCache="false"
 
