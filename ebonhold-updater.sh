@@ -452,5 +452,9 @@ downloadFiles "${game_files}"
 [[ -f "${targetdir}/Cache/invalid" ]] && clearCache
 
 if [ ${#} -gt 0 ]; then
+    if [[ "${*,,}" == *wow.exe* ]]; then
+        unset TZ # Fix for bug with proton/wine reading timezone on some distros
+        export PROTON_FORCE_LARGE_ADDRESS_AWARE=1 WINE_LARGE_ADDRESS_AWARE=1 # Allow Wow use more than 32bit limit of memory if patches is applied
+    fi
     exec "${@}"
 fi
