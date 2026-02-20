@@ -326,7 +326,12 @@ for arg in "${@}"; do
     case "${arg}" in
         --debug) debug="true"; debug "Debug messages enabled" ;;
         --verify) include_common="true" ; debug "Preparing to download/verify client files" ;;
-        --directory=*) targetdir="$(realpath "${arg#--directory=}")"; debug "Target directory set to: ${targetdir}" ;;
+        --directory=*)
+            targetdir="${arg#--directory=}"
+            [[ "${targetdir}" == ~* ]] && targetdir="${targetdir/#\~/$HOME}"
+            targetdir="$(realpath "${targetdir}")"} || error 1 "Directory not found: ${targetdir}"
+            debug "Target directory set to: ${targetdir}"
+            ;;
         --game=*) game="${arg#--game=}"; debug "Game set to: ${game}" ;;
         --mods=*)
             optional_slugs="${arg#--mods=}"
