@@ -329,7 +329,7 @@ for arg in "${@}"; do
         --directory=*)
             targetdir="${arg#--directory=}"
             [[ "${targetdir}" == ~* ]] && targetdir="${targetdir/#\~/$HOME}"
-            targetdir="$(realpath "${targetdir}")"} || error 1 "Directory not found: ${targetdir}"
+            targetdir="$(realpath "${targetdir}")" || error 1 "Directory not found: ${targetdir}"
             debug "Target directory set to: ${targetdir}"
             ;;
         --game=*) game="${arg#--game=}"; debug "Game set to: ${game}" ;;
