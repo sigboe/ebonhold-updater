@@ -374,7 +374,6 @@ for i in "${!args[@]}"; do
     fi
 done
 
-set -x
 if [[ -z "${authToken}" ]]; then
     [[ -f "${targetdir}/.updaterToken" ]] && token_file="${targetdir}/.updaterToken"
     [[ -f "${token_file}" ]] && authToken="$(<"${token_file}")"
@@ -389,7 +388,6 @@ if [[ -n "${authToken}" ]]; then
         debug "Token works, manifest fetched"
     fi
 fi
-set +x
 
 if [[ -z "${manifest}" ]]; then
     [[ -z "${ebonhold_user}" ]] && { ebonhold_user="$(prompt_text "Ebonhold Login" "Enter your username:")" || exit 1; }
