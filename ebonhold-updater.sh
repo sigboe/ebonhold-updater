@@ -3,6 +3,7 @@
 : "${debug:=false}"
 : "${game:=roguelike-prod}"
 scriptdir="$(dirname "$(readlink -f "${0}")")"
+targetdir="${scriptdir}"
 login_api="https://api.project-ebonhold.com/api/auth/login"
 manifest_api="https://api.project-ebonhold.com/api/launcher/games"
 file_url_api="https://api.project-ebonhold.com/api/launcher/download?file_ids=" # append comma sepparate list of file ids
@@ -250,11 +251,11 @@ downloadFiles() {
             debug "Expected md5sum: ${expected_md5}"
 
             download="false"
-            if [[ ! -f "${scriptdir}/${path}" ]]; then
+            if [[ ! -f "${targetdir}/${path}" ]]; then
                 debug "File not found, downloading"
                 download="true"
             else
-                local_md5="$(md5sum "${scriptdir}/${path}" | cut -d' ' -f1)"
+                local_md5="$(md5sum "${targetdir}/${path}" | cut -d' ' -f1)"
                 debug "Local md5sum: ${local_md5}"
 
                 if [[ "${local_md5}" != "${expected_md5}" ]]; then
@@ -264,13 +265,13 @@ downloadFiles() {
             fi
 
             if [[ "${download}" == "true" ]]; then
-                mkdir -p "$(dirname "${scriptdir}/${path}")"
+                mkdir -p "$(dirname "${targetdir}/${path}")"
                 response="$(curl -s -H "Authorization: Bearer ${authToken}" "${file_url_api}${id}")"
                 retry_after="$(jq -r '.retry_after_minutes // 0' <<<"$response")"
                 [[ "${retry_after}" -gt 0 ]] && error 1 "Rate limit hit for file ${path}\nPlease wait ${retry_after} minutes"
                 url="$(jq --raw-output '.files|.[]|.url' <<< "${response}")"
-                curl -fL "${url}" -o "${scriptdir}/${path}"
-                [[ -d "${scriptdir}/Cache" ]] && touch "${scriptdir}/Cache/invalid"
+                curl -fL "${url}" -o "${targetdir}/${path}"
+                [[ -d "${targetdir}/Cache" ]] && touch "${targetdir}/Cache/invalid"
             fi
         done <<< "${game_files}" | progress "Project Ebonhold Updater"
     fi
@@ -292,28 +293,28 @@ deleteFiles() {
         path="${path//$'\r'/}"
         debug "File ID: ${id} File: ${path}"
 
-        resolvedpath="$(realpath -m "${scriptdir}/${path}")"
-        if [[ "${resolvedpath}" != "${scriptdir}/"* ]]; then
+        resolvedpath="$(realpath -m "${targetdir}/${path}")"
+        if [[ "${resolvedpath}" != "${targetdir}/"* ]]; then
             debug "Skipping unsafe path: ${resolvedpath}"
             continue
         fi
 
-        if [[ -f "${scriptdir}/${path}" ]]; then
+        if [[ -f "${targetdir}/${path}" ]]; then
             debug "File found, deleting"
-            rm -- "${scriptdir}/${path}"
+            rm -- "${targetdir}/${path}"
             invalidCache="true"
         fi
     done <<< "${game_files}"
-    [[ "${invalidCache}" == "true" && -d "${scriptdir}/Cache" ]] && touch "${scriptdir}/Cache/invalid"
+    [[ "${invalidCache}" == "true" && -d "${targetdir}/Cache" ]] && touch "${targetdir}/Cache/invalid"
 }
 
 # This does clear the cache if there is any cache
 # to clear only when we think the cache is invalid then call the function like so:
-# [[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
+# [[ -f "${targetdir}/Cache/invalid" ]] && clearCache
 clearCache() {
     local deleted
-    if [[ -d "${scriptdir}/Cache" ]] && deleted="$(find "${scriptdir:?scriptdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)"; then
-        rm "${scriptdir}/Cache/invalid"
+    if [[ -d "${targetdir}/Cache" ]] && deleted="$(find "${targetdir:?targetdir is not set}/Cache" -iname '*.wdb' -type f -print -delete)"; then
+        rm "${targetdir}/Cache/invalid"
         [[ -n "${deleted}" ]] && debug "Update fetched, cleared cache\n${deleted}"
     fi
 }
@@ -325,6 +326,7 @@ for arg in "${@}"; do
     case "${arg}" in
         --debug) debug="true"; debug "Debug messages enabled" ;;
         --verify) include_common="true" ; debug "Preparing to download/verify client files" ;;
+        --directory=*) targetdir="$(realpath "${arg#--directory=}")"; debug "Target directory set to: ${targetdir}" ;;
         --game=*) game="${arg#--game=}"; debug "Game set to: ${game}" ;;
         --mods=*)
             optional_slugs="${arg#--mods=}"
@@ -372,6 +374,11 @@ for i in "${!args[@]}"; do
     fi
 done
 
+set -x
+if [[ -z "${authToken}" ]]; then
+    [[ -f "${targetdir}/.updaterToken" ]] && token_file="${targetdir}/.updaterToken"
+    [[ -f "${token_file}" ]] && authToken="$(<"${token_file}")"
+fi
 if [[ -n "${authToken}" ]]; then
     debug "Auth token found"
     manifest="$(curl -s -H "Authorization: Bearer ${authToken}" "${manifest_api}")"
@@ -382,6 +389,7 @@ if [[ -n "${authToken}" ]]; then
         debug "Token works, manifest fetched"
     fi
 fi
+set +x
 
 if [[ -z "${manifest}" ]]; then
     [[ -z "${ebonhold_user}" ]] && { ebonhold_user="$(prompt_text "Ebonhold Login" "Enter your username:")" || exit 1; }
@@ -408,7 +416,7 @@ if [[ -z "${manifest}" ]]; then
     fi
 fi
 
-if [[ ! -n "$(find "${scriptdir}/" -maxdepth 1 -iname "wow.exe")" ]]; then
+if [[ ! -n "$(find "${targetdir}/" -maxdepth 1 -iname "wow.exe")" ]]; then
     if prompt_yes_no "Project Ebonhold Updater" "Wow.exe not found in the current directory.\n\nDownload the full client?"; then
         include_common="true"
         if prompt_yes_no "Project Ebonhold Updater" "Do you want to install the \"HD Patch\"?"; then
@@ -441,7 +449,7 @@ game_files+=$'\n'"$(queueGame "${game_index}" "${manifest}")"
 [[ -n "${rm_files}" ]] && deleteFiles "${rm_files}"
 downloadFiles "${game_files}"
 
-[[ -f "${scriptdir}/Cache/invalid" ]] && clearCache
+[[ -f "${targetdir}/Cache/invalid" ]] && clearCache
 
 if [ ${#} -gt 0 ]; then
     exec "${@}"
