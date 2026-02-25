@@ -321,16 +321,20 @@ clearCache() {
 
 # Arguments that will be removed from "${@}"
 # This is used for arguments that will not be passed to the wrapped program
+argDirectory="false"
 filtered_args=()
 for arg in "${@}"; do
+    if [[ "${argDirectory}" == "true" ]]; then
+        targetdir="$(realpath "${arg}")" || error 1 "Directory not found: ${arg}"
+        debug "Target directory set to: ${targetdir}"
+        argDirectory="false"
+        continue
+    fi
     case "${arg}" in
         --debug) debug="true"; debug "Debug messages enabled" ;;
         --verify) include_common="true" ; debug "Preparing to download/verify client files" ;;
-        --directory=*)
-            targetdir="${arg#--directory=}"
-            [[ "${targetdir}" == ~* ]] && targetdir="${targetdir/#\~/$HOME}"
-            targetdir="$(realpath "${targetdir}")" || error 1 "Directory not found: ${targetdir}"
-            debug "Target directory set to: ${targetdir}"
+        --directory)
+            argDirectory="true"
             ;;
         --game=*) game="${arg#--game=}"; debug "Game set to: ${game}" ;;
         --mods=*)
@@ -347,6 +351,9 @@ for arg in "${@}"; do
     esac
 done
 set -- "${filtered_args[@]}"
+if [[ "${argDirectory}" == "true" ]]; then
+    error 1 "--directory requires a path argument"
+fi
 
 # The game supports loging in via -login and -password
 # If ebonhold-updater is ran as a wrapper (exmaple in steam, see readme)
